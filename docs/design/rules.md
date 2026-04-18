@@ -8,26 +8,29 @@ the severities of the rules that fired on it.
 
 ## R1 — Dependency diff
 
-**What it does.** For each direct dependency in the lockfile, compare its
-declared dependencies against the previously-installed version (if known from
-a prior scan's cache, or from the previous lockfile if git is available).
-Flag any *additions*, especially transitive ones that weren't there before.
+**What it does.** For each package in the lockfile, compare its declared
+dependencies against a **baseline version**, defined as the highest
+published semver strictly less than the current version (fetched from the
+registry; see architecture.md D1). Flag any *additions* to the dependency
+list, especially transitive ones.
 
 **What it catches.** The exact axios pattern: a previously-clean package
 suddenly gains a new dependency it never had. This is the single most
 valuable rule in v0.1.
 
-**What it misses.** First-time installs where there's no prior version to
-compare against. First-run on a project the tool has never seen before can
-only compare declared dependencies against the latest *other* published
-versions of that package.
+**What it misses.** Packages with no prior published version (brand-new
+packages — but those get caught by R2 anyway). Pre-release versions, which
+are excluded from the baseline search unless the current version is also
+a pre-release.
 
 **Severity.** High if the newly-added dep also triggers R2 or R3. Medium
 otherwise.
 
-**Implementation notes.** Needs to handle both the "we have a cached record
-of the previous version" case and the "git log tells us the previous
-lockfile" case. Start with the cache case; git integration can wait.
+**Implementation notes.** Baseline data comes from the registry via the
+cache, same as all other registry lookups. No git integration in v0.1 —
+comparing against the previous lockfile via `git log` was considered and
+explicitly deferred; the registry-baseline approach is simpler and
+handles first-run correctly.
 
 ## R2 — Package age
 
@@ -56,17 +59,28 @@ or `postinstall` script in its `package.json`.
 is most of them. axios/plain-crypto-js absolutely triggers this.
 
 **What it misses.** Attacks that don't use install scripts. Also produces
-false positives on legitimate native-module packages (node-gyp, sharp,
-better-sqlite3, etc.) — these will need an allowlist or a lower default
-severity.
+false positives on legitimate native-module packages, mitigated by the
+allowlist below.
 
 **Severity.** Low by default. Rises to medium/high when combined with other
 rules.
 
-**Implementation notes.** This is the most false-positive-prone rule. The
-allowlist of legitimate install-script users needs care. Start with the top
-100 most-downloaded packages that have install scripts for native
-compilation.
+**Allowlist.** R3 does not fire on packages in a compile-time embedded
+allowlist of ~50–100 well-known native-module packages (e.g., `node-gyp`,
+`sharp`, `better-sqlite3`, `bcrypt`, `canvas`, `sqlite3`, `fsevents`,
+`puppeteer`, `cypress`, `electron`, `playwright`, platform packages for
+`@swc/core-*` and `esbuild`). Lives at `internal/rules/r3_allowlist.go`
+as a Go slice with a one-line comment per entry explaining why it's
+there. Refreshed by hand, by PR, quarterly. The allowlist **only**
+suppresses R3 — R1, R2, R4, R6 still run against allowlisted packages
+normally.
+
+**Implementation notes.** This is the most false-positive-prone rule.
+Adding an entry to the allowlist requires justification in the PR
+description. When in doubt, leave it off — a false positive on a
+well-known package is annoying but recoverable; a false negative on a
+compromised well-known package is the whole failure mode we're trying
+to avoid.
 
 ## R4 — Install script content heuristics
 
