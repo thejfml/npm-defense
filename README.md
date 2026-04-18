@@ -29,9 +29,11 @@ detection.
 
 ## Status
 
-See `docs/design/` for the current design documents. Implementation has
-not started yet.
+**In progress.** Phases 0-2 complete (scaffolding, lockfile parser, registry client).
+See [issue #2](https://github.com/thejfml/npm-defense/issues/2) for progress tracker.
+
+Design docs: `docs/design/`
 
 ## License
 
-TBD before first commit.
+Apache License 2.0
